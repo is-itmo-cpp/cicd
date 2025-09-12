@@ -1,0 +1,237 @@
+name: "Code quality"
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        type: string
+        required: true
+
+      tidy-config:
+        description: |
+          Clang-tidy configuration.
+        type: string
+        required: true
+
+      coverage:
+        description: |
+          Whether to measure test coverage.
+        type: boolean
+        default: true
+
+      timeout:
+        description: |
+          Timeout in minutes before the workflow is failed.
+        type: number
+        default: 3
+
+    outputs:
+      coverage:
+        value: ${{ inputs.coverage && jobs.coverage.outputs.coverage || 'skipped' }}
+      codestyle:
+        value: ${{ jobs.codestyle.outputs.codestyle }}
+
+jobs:
+  codestyle:
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: ${{ inputs.timeout }}
+    name: Codestyle
+
+    outputs:
+      codestyle: ${{ steps.output.outputs.codestyle }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Generate build system
+        run: |
+          cmake \
+            -B /tmp/cicd/build \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Run clang-tidy
+        env:
+          TIDY_CONFIG: ${{ inputs.tidy-config }}
+        run: |
+          echo "$TIDY_CONFIG" > /tmp/cicd/tidy-config.yml
+
+          run-clang-tidy-19 \
+            -p /tmp/cicd/build \
+            -config-file=/tmp/cicd/tidy-config.yml \
+            -header-filter=. \
+            -exclude-header-filter='^\/tmp\/cicd\/build\/' \
+            -source-filter='^(?!\/tmp\/cicd\/build\/).*$' \
+            -export-fixes /tmp/cicd/tidy-fixes.yml || true
+
+      - name: Show cool diagnostics
+        id: output
+        shell: 'python3 {0}'
+        run: |
+          import bisect
+          import re
+          import yaml
+          from dataclasses import dataclass, field
+          from pathlib import Path
+
+          from gha_helper import gh
+
+
+          @dataclass
+          class PositionMap:
+            _files_offsets: dict = field(default_factory=dict)
+
+            def _get_offsets(self, path: Path):
+              if path in self._files_offsets:
+                return self._files_offsets[path]
+
+              with path.open('rb') as f:
+                data = f.read()
+
+              offsets = [0] + [i for i, c in enumerate(data, 1) if c == ord('\n')]
+              self._files_offsets[path] = offsets
+
+              return offsets
+
+            def get_line_col(self, path: Path, offset: int):
+              offsets = self._get_offsets(path)
+
+              line_idx = bisect.bisect_right(offsets, offset) - 1
+              line_start = offsets[line_idx]
+
+              line, column = line_idx + 1, offset - line_start + 1
+
+              return line, column
+
+
+          # https://github.com/actions/toolkit/blob/f58042f9cc16bcaa87afaa86c2974a8c771ce1ea/packages/core/src/command.ts#L103
+          def escape_data(s) -> str:
+            return (str(s)
+              .replace("%", "%25")
+              .replace("\r", "%0D")
+              .replace("\n", "%0A"))
+
+
+          def escape_property(s) -> str:
+            return (str(s)
+              .replace("%", "%25")
+              .replace("\r", "%0D")
+              .replace("\n", "%0A")
+              .replace(":", "%3A")
+              .replace(",", "%2C"))
+
+
+          def process_diagnostics(diagnostics: Path, root: Path):
+            with open(diagnostics, "r", encoding="utf-8") as f:
+              data = yaml.safe_load(f)
+
+            if data is None:
+              raise ValueError()
+
+            posmap = PositionMap()
+            seen = set()
+            total_warnings = 0
+
+            for diagnostic in data["Diagnostics"]:
+              name = diagnostic["DiagnosticName"]
+              level = diagnostic["DiagnosticName"]
+              message = diagnostic["DiagnosticMessage"]["Message"]
+              path = diagnostic["DiagnosticMessage"]["FilePath"]
+              offset = diagnostic["DiagnosticMessage"]["FileOffset"]
+
+              if path == "":
+                continue
+
+              path = Path(path).absolute()
+
+              key = (path, name, offset)
+              if key in seen:
+                continue
+              seen.add(key)
+
+              line, col = posmap.get_line_col(path, offset)
+
+              try:
+                file = path.relative_to(root.absolute())
+              except ValueError:
+                continue
+
+              props = ",".join([
+                f"file={escape_property(file)}",
+                f"line={line}",
+                f"col={col}",
+              ])
+
+              if level == "Error":
+                level = "error"
+              else:
+                level = "warning"
+
+              print(f"::{level} {props}::{escape_data(message)}")
+              total_warnings += 1
+
+            gh.output.save_json("codestyle", {
+              "total_warnings": total_warnings,
+            })
+
+          process_diagnostics(Path("/tmp/cicd/tidy-fixes.yml"), Path("."))
+
+  coverage:
+    runs-on: ${{ inputs.runs-on }}
+    if: ${{ inputs.coverage }}
+    timeout-minutes: ${{ inputs.timeout }}
+    name: Coverage
+
+    outputs:
+      coverage: ${{ steps.output.outputs.coverage }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Generate build system
+        run: |
+          cmake \
+            -B /tmp/cicd/build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DWITH_COVERAGE=ON \
+            -DNO_COVERAGE_HTML=ON
+
+      - name: Build tests
+        run: |
+          cmake \
+            --build /tmp/cicd/build \
+            --parallel $(nproc)
+
+      - name: Check coverage
+        run: |
+          cmake \
+            --build /tmp/cicd/build \
+            --target coverage
+
+      - name: Save output
+        id: output
+        if: ${{ always() }}
+        shell: 'python3 {0}'
+        run: |
+          import json
+          from gha_helper import gh
+
+          try:
+            with open("/tmp/cicd/build/coverage.json") as f:
+              coverage = json.load(f)
+
+            with open("/tmp/cicd/build/coverage.txt") as f:
+              coverage_log = f.read()
+
+            gh.output.save_json("coverage", {
+              "ran": True,
+              "percent": coverage["line_percent"],
+              "log": coverage_log,
+            })
+          except FileNotFoundError:
+            gh.output.save_json("coverage", {
+              "ran": False
+            })

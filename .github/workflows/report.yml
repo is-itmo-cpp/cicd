@@ -1,0 +1,216 @@
+name: "Report"
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:   { type: string, required: true, }
+
+      config:    { type: string, required: true, }
+
+      tests:     { type: string, required: true, }
+      codestyle: { type: string, required: true, }
+      coverage:  { type: string, required: true, }
+
+jobs:
+  summary:
+    name: Summary
+    runs-on: ${{ inputs.runs-on }}
+    if: ${{ !cancelled() }}
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Generate summary
+        id: summary
+        env:
+          CONFIG: ${{ inputs.config }}
+
+          PUSHED_AT: ${{ github.event.repository.pushed_at }}
+          COMMIT: ${{ github.event.pull_request.head.sha }}
+
+          TEST_RESULTS: ${{ inputs.tests }}
+          CODESTYLE: ${{ inputs.codestyle }}
+          COVERAGE: ${{ inputs.coverage }}
+        shell: 'python3 {0}'
+        run: |
+          from collections import defaultdict
+          from datetime import datetime, timezone
+          from zoneinfo import ZoneInfo
+
+          from gha_helper import gh, md
+
+
+          config = gh.input.get_json("CONFIG")
+
+          def grade(value, levels, results):
+            *results, default = results
+            pairs = list(zip(levels, results))
+
+            if levels[1] > levels[0]:
+              for threshold, result in reversed(pairs):
+                if value >= threshold:
+                  return result
+            else:
+              for threshold, result in reversed(pairs):
+                if value <= threshold:
+                  return result
+
+            return default
+
+
+          ########################## GENERATE SUMMARY ##########################
+
+          def render_overview(tests, codestyle, coverage):
+            all_passed = all(platform["all_passed"] for platform in tests.values())
+            if all_passed:
+              md.raw("- All tests completed successfully ✅🎉")
+            else:
+              md.raw("- Some of the tests had failed ❌")
+            
+            n_warnings = codestyle.get("total_warnings", -1)
+            codestyle_text = grade(n_warnings, config["codestyle"]["levels"], [
+              "- Code style is not followed ❌",
+              "- Code style is followed ⚠️",
+              "- Code style is followed ✅",
+              "- Code style is followed ⭐️",
+              "- Code style is 💀",
+            ])
+            plural = 's' if n_warnings != 1 else ''
+            md.raw(f"{codestyle_text} ({n_warnings} warning{plural})")
+            
+            if coverage is not None:
+              percent = coverage.get("percent", -1)
+              emoji = grade(percent, config["coverage"]["levels"], ["❌", "⚠️", "✅", "⭐️", "💀"])
+              md.raw(f"- Code coverage: {percent}% {emoji}")
+              md.raw()
+
+
+          def render_build_matrix(tests, platform_names):
+            md.raw("### Build matrix")
+
+            table = [[ "", *platform_names.values() ]]
+            table.append([f"**Built**"])
+            for pid in platform_names.keys():
+              if tests[pid]["built"]:
+                table[-1].append("✅")
+              else:
+                table[-1].append("❌")
+
+            md.table(table)
+
+
+          def render_test_matrix(tests, platform_names):
+            d = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+            for platform in tests.values():
+              for test, status in platform.get("tests", {}).items():
+                suite, name = test.split(".", 1)
+                d[suite][platform["id"]][status].append(name)
+
+            md.raw("### Test matrix")
+
+            table = [[ "", "№ Passed", *platform_names.values() ]]
+            for suite, platforms in d.items():
+              suite = suite.removesuffix("Suite")
+              table.append([f"**{suite}**"])
+
+              failed = set(sum((p["failed"] for p in platforms.values()), []))
+              passed = set(sum((p["passed"] for p in platforms.values()), []))
+
+              n_total = len(failed | passed)
+              n_passed = n_total - len(failed)
+
+              table[-1].append(f"`{n_passed}/{n_total}`")
+
+              for pid in platform_names.keys():
+                if not tests[pid]["ran"]:
+                  table[-1].append("💀")
+                else:
+                  if len(platforms[pid]["failed"]) > 0:
+                    table[-1].append("❌")
+                  else:
+                    table[-1].append("✅")
+
+            md.table(table)
+
+
+          def render_logs(tests, coverage, platform_names):
+            with md.spoiler("<h3>Logs</h3>"):
+              if coverage is not None:
+                with md.spoiler("Code coverage"):
+                  if coverage["ran"]:
+                    md.code(coverage["log"])
+                  else:
+                    md.raw("Did not run.")
+                    md.raw("Check job logs for more info.")
+
+              for pid, name in platform_names.items():
+                with md.spoiler(f"Testing logs / {name}"):
+                  if tests[pid]["ran"]:
+                    md.code(tests[pid].get("logs"))
+                  else:
+                    if not tests[pid]["built"]:
+                      md.raw("Did not run. Build has failed.")
+                    else:
+                      md.raw("Did not run.")
+
+                    md.raw("Check job logs for more info.")
+
+
+          def render_time_footer():
+            pushed_at = gh.input.get_timestamp("PUSHED_AT") \
+              .astimezone(ZoneInfo("Europe/Moscow")) \
+              .strftime('%Y-%m-%d %H:%M:%S %Z%z')
+
+            commit = gh.input.get("COMMIT")[:7]
+            md.raw(f"*This report was generated for the commit* `{commit}` *pushed on* `{pushed_at}`.")
+
+
+          def get_verdict(tests, coverage, codestyle):
+            all_passed = all(platform["all_passed"] for platform in tests.values())
+            coverage_ok = coverage.get("percent", -1) >= config["coverage"]["levels"][1]
+            style_ok = codestyle.get("total_warnings", float("inf")) <= config["codestyle"]["levels"][1]
+
+            success = all_passed and coverage_ok and style_ok
+
+            return "success" if success else "failure"
+
+            
+          def main():
+            md.raw("# 📊 Report Card")
+            md.raw()
+            md.raw("### Overview")
+            md.raw()
+
+            tests = { t["id"]: t for t in gh.input.get_json("TEST_RESULTS") }
+            codestyle = gh.input.get_json("CODESTYLE")
+
+            if gh.input.get("COVERAGE") == "skipped":
+              coverage = None
+            else:
+              coverage = gh.input.get_json("COVERAGE")
+
+            render_overview(tests, codestyle, coverage)
+
+            if config["tests"].get("build_only", False):
+              render_build_matrix(tests, config["tests"]["platforms"])
+            else:
+              render_test_matrix(tests, config["tests"]["platforms"])
+
+            render_logs(tests, coverage, config["tests"]["platforms"])
+            render_time_footer()
+
+            gh.output.save("verdict", get_verdict(tests, coverage, codestyle))
+
+          main()
+
+      - name: Post summary
+        run: cat SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Send report card to pull request
+        uses: mshick/add-pr-comment@b8f338c590a895d50bcbfa6c5859251edc8952fc  # v2.8.2
+        with:
+          refresh-message-position: true
+          message-path: SUMMARY.md
+
+      - name: Fail the workflow
+        if: ${{ steps.summary.outputs.verdict != 'success' }}
+        run: exit 1

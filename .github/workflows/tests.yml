@@ -1,0 +1,167 @@
+name: "Run tests"
+
+on:
+  workflow_call:
+    inputs:
+      runs-on: 
+        type: string
+        required: true
+
+      platforms:
+        description: |
+          Stringified JSON list, containing descriptions of platforms that tests should be ran on.
+          You can specify up to 8 platforms.
+        required: true
+        type: string
+
+      build-only:
+        description: |
+          Check that everything builds, but do not run any tests.
+        type: boolean
+        default: false
+
+      repeat:
+        description: |
+          How many times tests should be run.
+        type: number
+        default: 7
+
+      timeout:
+        description: |
+          Timeout in minutes before the workflow is failed.
+        type: number
+        default: 3
+
+    outputs:
+      results:
+        value: ${{ format('[{0}]', join(jobs.run_tests.outputs.*, ',')) }}
+
+jobs:
+  run_tests:
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: ${{ inputs.timeout }}
+    continue-on-error: true
+
+    strategy:
+      matrix:
+        include: ${{ fromJSON(inputs.platforms) }}
+
+    # To anyone who stumbled upon this:
+    # Yes, currently THIS is the only way to support dynamic matrix output.
+    # Aren't GitHub actions just wonderful?
+    outputs:
+      0: ${{ steps.output.outputs.job0 }}
+      1: ${{ steps.output.outputs.job1 }}
+      2: ${{ steps.output.outputs.job2 }}
+      3: ${{ steps.output.outputs.job3 }}
+      4: ${{ steps.output.outputs.job4 }}
+      5: ${{ steps.output.outputs.job5 }}
+      6: ${{ steps.output.outputs.job6 }}
+      7: ${{ steps.output.outputs.job7 }}
+
+    env: 
+      ID: ${{ matrix.id }}
+      COMPILER: ${{ matrix.compiler }}
+      FLAGS: ${{ matrix.flags }}
+
+    name: ${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Print toolchain versions
+        run: |
+          echo
+          echo cmake --version
+          cmake --version | sed 's/^/> /'
+          echo
+          echo "$COMPILER" --version
+          "$COMPILER" --version | sed 's/^/> /'
+
+      - name: Generate build system
+        run: |
+          cmake \
+            -B /tmp/cicd/build \
+            -D CMAKE_CXX_COMPILER="$COMPILER" \
+            -D CMAKE_CXX_FLAGS="$FLAGS"
+
+      - name: Build tests
+        id: build
+        run: |
+          cmake \
+            --build /tmp/cicd/build \
+            --parallel "$(nproc)"
+
+      - name: Run tests
+        id: test
+        if: ${{ !inputs.build-only }}
+        run: |
+          ctest \
+            --test-dir /tmp/cicd/build \
+            --repeat-until-fail ${{ inputs.repeat }} \
+            --output-on-failure \
+            --output-log /tmp/cicd/tests.log \
+            --output-junit /tmp/cicd/tests.xml
+
+      - name: Save output
+        id: output
+        if: ${{ always() }}
+        env:
+          JOB_INDEX: ${{ strategy.job-index }}
+          BUILT: ${{ steps.build.outcome == 'success' }}
+          ALL_PASSED: ${{ steps.test.outcome == 'success' }}
+        shell: 'python3 {0}'
+        run: |
+          import os
+          import xml.etree.ElementTree as ET
+
+          from gha_helper import gh
+
+
+          LOG_PATH = "/tmp/cicd/tests.log"
+          XML_PATH = "/tmp/cicd/tests.xml"
+
+
+          def parse_junit(path):
+            tests = {}
+
+            for testcase in ET.parse(path).iter("testcase"):
+              attrs = testcase.attrib
+
+              if (status := attrs.get("status")) is None:
+                continue
+
+              status = "passed" if status == "run" else "failed"
+              tests[attrs["name"]] = status
+
+            return tests
+
+
+          def main():
+            platform_id = gh.input.get("ID")
+            built = gh.input.get("BUILT") == "true"
+
+            if os.path.exists(XML_PATH):
+              tests = parse_junit(XML_PATH)
+              data = {
+                "id": platform_id,
+                "built": built,
+                "ran": True,
+                "all_passed": gh.input.get("ALL_PASSED") == "true",
+                "logs": open(LOG_PATH).read(),
+                "tests": tests,
+              }
+            else:
+              data = {
+                "id": platform_id,
+                "built": built,
+                "ran": False,
+                "all_passed": False
+              }
+
+            job_index = gh.input.get("JOB_INDEX")
+            gh.output.save_json(f"job{job_index}", data)
+
+
+          main()
