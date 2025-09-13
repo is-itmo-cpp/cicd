@@ -64,7 +64,7 @@ jobs:
             else:
               md.raw("- Some of the tests had failed ❌")
             
-            n_warnings = codestyle.get("total_warnings", -1)
+            n_warnings = codestyle.get("total_warnings", float("inf"))
             codestyle_text = grade(n_warnings, config["codestyle"]["levels"], [
               "- Code style is not followed ❌",
               "- Code style is followed ⚠️",
