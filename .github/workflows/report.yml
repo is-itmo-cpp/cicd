@@ -45,14 +45,12 @@ jobs:
             *results, default = results
             pairs = list(zip(levels, results))
 
-            if levels[1] > levels[0]:
-              for threshold, result in reversed(pairs):
-                if value >= threshold:
-                  return result
-            else:
-              for threshold, result in reversed(pairs):
-                if value <= threshold:
-                  return result
+            if levels[0] < levels[-1]:
+              pairs = reversed(pairs):
+
+            for threshold, result in pairs:
+              if value >= threshold:
+                return result
 
             return default
 
@@ -72,7 +70,7 @@ jobs:
               "- Code style is followed ⚠️",
               "- Code style is followed ✅",
               "- Code style is followed ⭐️",
-              "- Code style is 💀",
+              "- Code style is ??? 💀",
             ])
             plural = 's' if n_warnings != 1 else ''
             md.raw(f"{codestyle_text} ({n_warnings} warning{plural})")
