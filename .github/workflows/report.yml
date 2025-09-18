@@ -46,7 +46,7 @@ jobs:
             pairs = list(zip(levels, results))
 
             if levels[0] < levels[-1]:
-              pairs = reversed(pairs):
+              pairs = reversed(pairs)
 
             for threshold, result in pairs:
               if value >= threshold:
