@@ -166,7 +166,7 @@ jobs:
             all_passed = all(platform["all_passed"] for platform in tests.values())
 
             if coverage is not None:
-              coverage_ok = coverage.get("percent", -1) => config["coverage"]["levels"][1]
+              coverage_ok = coverage.get("percent", -1) >= config["coverage"]["levels"][1]
             else:
               coverage_ok = True
             
