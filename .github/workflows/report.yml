@@ -24,7 +24,11 @@ jobs:
         env:
           CONFIG: ${{ inputs.config }}
 
-          PUSHED_AT: ${{ github.event.repository.pushed_at }}
+          # Actually, this is the time of the last push across ALL branches.
+          # It doesn't matter for our usecase, since it (should) always be >= than the actual branch push time.
+          #
+          # So, if you forgot to open a PR and missed a deadline -- you've brought this upon yourself.
+          PUSHED_AT: ${{ github.event.pull_request.head.repo.pushed_at }}
           COMMIT: ${{ github.event.pull_request.head.sha }}
 
           TEST_RESULTS: ${{ inputs.tests }}
