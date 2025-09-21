@@ -184,7 +184,7 @@ jobs:
 
             success = all_passed and coverage_ok and style_ok
 
-            return "success" if success else "failure"
+            return "pass" if success else "fail"
 
             
           def main():
@@ -225,5 +225,5 @@ jobs:
           message-path: SUMMARY.md
 
       - name: Fail the workflow
-        if: ${{ steps.summary.outputs.verdict != 'success' }}
+        if: ${{ steps.summary.outputs.verdict != 'pass' }}
         run: exit 1

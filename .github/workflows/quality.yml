@@ -45,6 +45,7 @@ jobs:
 
     outputs:
       codestyle: ${{ steps.output.outputs.codestyle }}
+      verdict: ${{ steps.output.outputs.verdict }}
 
     steps:
       - uses: actions/checkout@v4
@@ -76,6 +77,8 @@ jobs:
 
       - name: Show cool diagnostics
         id: output
+        env:
+          LEVELS: ${{ inputs.levels }}
         shell: 'python3 {0}'
         run: |
           import bisect
@@ -185,11 +188,22 @@ jobs:
               print(f"::{level} {props}::{escape_data(message)}")
               total_warnings += 1
 
+            required_warns = gh.input.get_json("LEVELS")["codestyle"][0]
+            verdict = "pass" if total_warnings < required_warns else "fail"
+
+            print("\nVerdict:", verdict)
+
+            print(f"::set-output name=verdict::{verdict}")
+
             gh.output.save_json("codestyle", {
               "total_warnings": total_warnings,
             })
 
           process_diagnostics(Path("/tmp/cicd/tidy-fixes.yml"), Path("."))
+
+      - name: Fail the workflow
+        if: ${{ steps.output.outputs.verdict != 'pass' }}
+        run: exit 1
 
   coverage:
     runs-on: ${{ inputs.runs-on }}
