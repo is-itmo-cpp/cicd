@@ -7,6 +7,10 @@ on:
         type: string
         required: true
 
+      levels:
+        type: string
+        required: true
+
       tidy-config:
         description: |
           Clang-tidy configuration.
@@ -30,6 +34,8 @@ on:
         value: ${{ inputs.coverage && jobs.coverage.outputs.coverage || 'skipped' }}
       codestyle:
         value: ${{ jobs.codestyle.outputs.codestyle }}
+      config:
+        value: ${{ inputs.levels }}
 
 jobs:
   codestyle:

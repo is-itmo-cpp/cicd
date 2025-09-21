@@ -35,6 +35,8 @@ on:
     outputs:
       results:
         value: ${{ format('[{0}]', join(jobs.run_tests.outputs.*, ',')) }}
+      config:
+        value: ${{ inputs.platforms }}
 
 jobs:
   run_tests:

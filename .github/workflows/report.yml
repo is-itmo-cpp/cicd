@@ -5,11 +5,12 @@ on:
     inputs:
       runs-on:   { type: string, required: true, }
 
-      config:    { type: string, required: true, }
-
       tests:     { type: string, required: true, }
       codestyle: { type: string, required: true, }
       coverage:  { type: string, required: true, }
+
+      config_tests:   { type: string, required: true, }
+      config_quality: { type: string, required: true, }
 
 jobs:
   summary:
@@ -22,7 +23,8 @@ jobs:
       - name: Generate summary
         id: summary
         env:
-          CONFIG: ${{ inputs.config }}
+          CONFIG_TESTS: ${{ inputs.config_tests }}
+          CONFIG_QUALITY: ${{ inputs.config_quality }}
 
           # Actually, this is the time of the last push across ALL branches.
           # It doesn't matter for our usecase, since it (should) always be >= than the actual branch push time.
@@ -43,7 +45,11 @@ jobs:
           from gha_helper import gh, md
 
 
-          config = gh.input.get_json("CONFIG")
+          config_tests = gh.input.get_json("CONFIG_TESTS")
+          config_quality = gh.input.get_json("CONFIG_QUALITY")
+
+          platform_names = { p["id"]: p["name_html"] for p in config_tests }
+
 
           def grade(value, levels, results):
             *results, default = results
@@ -69,7 +75,7 @@ jobs:
               md.raw("- Some of the tests had failed ❌")
             
             n_warnings = codestyle.get("total_warnings", -1)
-            codestyle_text = grade(n_warnings, config["codestyle"]["levels"], [
+            codestyle_text = grade(n_warnings, config_quality["codestyle"], [
               "- Code style is not followed ❌",
               "- Code style is followed ⚠️",
               "- Code style is followed ✅",
@@ -81,7 +87,7 @@ jobs:
             
             if coverage is not None:
               percent = coverage.get("percent", -1)
-              emoji = grade(percent, config["coverage"]["levels"], ["❌", "⚠️", "✅", "⭐️", "💀"])
+              emoji = grade(percent, config_quality["coverage"], ["❌", "⚠️", "✅", "⭐️", "💀"])
               md.raw(f"- Code coverage: {percent}% {emoji}")
               md.raw()
 
@@ -170,11 +176,11 @@ jobs:
             all_passed = all(platform["all_passed"] for platform in tests.values())
 
             if coverage is not None:
-              coverage_ok = coverage.get("percent", -1) >= config["coverage"]["levels"][1]
+              coverage_ok = coverage.get("percent", -1) >= config_quality["coverage"][1]
             else:
               coverage_ok = True
             
-            style_ok = codestyle.get("total_warnings", float("inf")) < config["codestyle"]["levels"][0]
+            style_ok = codestyle.get("total_warnings", float("inf")) < config_quality["codestyle"][0]
 
             success = all_passed and coverage_ok and style_ok
 
@@ -197,14 +203,12 @@ jobs:
 
             render_overview(tests, codestyle, coverage)
 
-            if config["tests"].get("build_only", False):
-              render_build_matrix(tests, config["tests"]["platforms"])
-            else:
-              render_test_matrix(tests, config["tests"]["platforms"])
+            render_test_matrix(tests, platform_names)
 
             # Temporarily disabled (🎃 LO'GS TAKING TOO LONG)
             # Ughh, sorry, I meant logs are too big.
             # render_logs(tests, coverage, config["tests"]["platforms"])
+
             render_time_footer()
 
             gh.output.save("verdict", get_verdict(tests, coverage, codestyle))
