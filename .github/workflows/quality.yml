@@ -64,6 +64,9 @@ jobs:
             -exclude-header-filter='^\/tmp\/cicd\/build\/' \
             -source-filter='^(?!\/tmp\/cicd\/build\/).*$' \
             -export-fixes /tmp/cicd/tidy-fixes.yml || true
+         
+          echo '# tidy-fixes.yml'
+          cat /tmp/cicd/tidy-fixes.yml
 
       - name: Show cool diagnostics
         id: output
