@@ -133,13 +133,13 @@ jobs:
               data = yaml.safe_load(f)
 
             if data is None:
-              raise ValueError()
+              data = {}
 
             posmap = PositionMap()
             seen = set()
             total_warnings = 0
 
-            for diagnostic in data["Diagnostics"]:
+            for diagnostic in data.get("Diagnostics", []):
               name = diagnostic["DiagnosticName"]
               level = diagnostic["DiagnosticName"]
               message = diagnostic["DiagnosticMessage"]["Message"]
