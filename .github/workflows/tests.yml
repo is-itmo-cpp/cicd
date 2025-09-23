@@ -149,7 +149,6 @@ jobs:
                 "built": built,
                 "ran": True,
                 "all_passed": gh.input.get("ALL_PASSED") == "true",
-                "logs": open(LOG_PATH).read(),
                 "tests": tests,
               }
             else:

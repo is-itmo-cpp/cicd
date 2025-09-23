@@ -202,7 +202,9 @@ jobs:
             else:
               render_test_matrix(tests, config["tests"]["platforms"])
 
-            render_logs(tests, coverage, config["tests"]["platforms"])
+            # Temporarily disabled (🎃 LO'GS TAKING TOO LONG)
+            # Ughh, sorry, I meant logs are too big.
+            # render_logs(tests, coverage, config["tests"]["platforms"])
             render_time_footer()
 
             gh.output.save("verdict", get_verdict(tests, coverage, codestyle))
