@@ -91,21 +91,6 @@ jobs:
               md.raw(f"- Code coverage: {percent}% {emoji}")
               md.raw()
 
-
-          def render_build_matrix(tests, platform_names):
-            md.raw("### Build matrix")
-
-            table = [[ "", *platform_names.values() ]]
-            table.append([f"**Built**"])
-            for pid in platform_names.keys():
-              if tests[pid]["built"]:
-                table[-1].append("✅")
-              else:
-                table[-1].append("❌")
-
-            md.table(table)
-
-
           def render_test_matrix(tests, platform_names):
             d = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
             for platform in tests.values():
@@ -116,6 +101,14 @@ jobs:
             md.raw("### Test matrix")
 
             table = [[ "", "№ Passed", *platform_names.values() ]]
+
+            table.append([f"*Built?*", ""])
+            for pid in platform_names.keys():
+              if tests[pid]["built"]:
+                table[-1].append("✅")
+              else:
+                table[-1].append("❌")
+            
             for suite, platforms in d.items():
               suite = suite.removesuffix("Suite")
               table.append([f"**{suite}**"])
