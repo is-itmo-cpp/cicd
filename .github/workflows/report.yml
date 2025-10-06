@@ -194,7 +194,7 @@ jobs:
             md.raw()
 
             tests = { t["id"]: t for t in gh.input.get_json("TEST_RESULTS") }
-            codestyle = gh.input.get_json("CODESTYLE")
+            codestyle = gh.input.get_json("CODESTYLE", {})
 
             if gh.input.get("COVERAGE") == "skipped":
               coverage = None
