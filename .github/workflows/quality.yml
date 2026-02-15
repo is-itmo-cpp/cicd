@@ -239,6 +239,10 @@ jobs:
             --build /tmp/cicd/build \
             --target coverage
 
+      - name: Show coverage log
+        run: |
+          cat /tmp/cicd/build/coverage.txt
+
       - name: Save output
         id: output
         if: ${{ always() }}
