@@ -95,7 +95,11 @@ jobs:
             d = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
             for platform in tests.values():
               for test, status in platform.get("tests", {}).items():
-                suite, name = test.split(".", 1)
+                if '.' in test:
+                  suite, name = test.split(".", 1)
+                else:
+                  suite, name = "*Unknown Suite*", test
+
                 d[suite][platform["id"]][status].append(name)
 
             md.raw("### Test matrix")
