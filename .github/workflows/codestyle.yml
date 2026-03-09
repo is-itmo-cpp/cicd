@@ -26,8 +26,8 @@ on:
         default: 3
 
     outputs:
-      codestyle:
-        value: ${{ jobs.codestyle.outputs.codestyle }}
+      results:
+        value: ${{ jobs.codestyle.outputs.results }}
       config:
         value: ${{ inputs.levels }}
 
@@ -38,7 +38,7 @@ jobs:
     name: Codestyle
 
     outputs:
-      codestyle: ${{ steps.output.outputs.codestyle }}
+      results: ${{ steps.output.outputs.results }}
       verdict: ${{ steps.output.outputs.verdict }}
 
     steps:
@@ -162,7 +162,7 @@ jobs:
             print("\nVerdict:", verdict)
 
             gh.output.save("verdict", verdict)
-            gh.output.save_json("codestyle", {
+            gh.output.save_json("results", {
               "total_warnings": total_warnings,
             })
 

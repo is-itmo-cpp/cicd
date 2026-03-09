@@ -20,8 +20,8 @@ on:
         default: 3
 
     outputs:
-      coverage:
-        value: ${{ jobs.coverage.outputs.coverage }}
+      results:
+        value: ${{ jobs.coverage.outputs.results }}
       config:
         value: ${{ inputs.levels }}
 
@@ -32,7 +32,7 @@ jobs:
     name: Coverage
 
     outputs:
-      coverage: ${{ steps.output.outputs.coverage }}
+      results: ${{ steps.output.outputs.results }}
       verdict: ${{ steps.output.outputs.verdict }}
 
     steps:
@@ -90,7 +90,7 @@ jobs:
             print(f"Verdict: {verdict}")
 
             gh.output.save("verdict", verdict)
-            gh.output.save_json("coverage", {
+            gh.output.save_json("results", {
               "ran": True,
               "percent": percent,
               "log": coverage_log,
@@ -99,7 +99,7 @@ jobs:
             print("\nVerdict: fail (coverage did not run)")
             gh.output.save("verdict", "fail")
 
-            gh.output.save_json("coverage", {
+            gh.output.save_json("results", {
               "ran": False
             })
 

@@ -3,15 +3,15 @@ name: "Report"
 on:
   workflow_call:
     inputs:
-      runs-on:   { type: string, required: true, }
+      runs-on:
+        type: string
+        required: true
 
-      tests:     { type: string, required: true, }
-      codestyle: { type: string, required: true, }
-      coverage:  { type: string, required: true, }
-
-      config_tests:     { type: string, required: true, }
-      config_codestyle: { type: string, required: true, }
-      config_coverage:  { type: string, required: true, }
+      data:
+        description: |
+          Stringified JSON object, containing configs and results from all modules.
+        type: string
+        required: true
 
 jobs:
   summary:
@@ -24,9 +24,7 @@ jobs:
       - name: Generate summary
         id: summary
         env:
-          CONFIG_TESTS: ${{ inputs.config_tests }}
-          CONFIG_CODESTYLE: ${{ inputs.config_codestyle }}
-          CONFIG_COVERAGE: ${{ inputs.config_coverage }}
+          DATA: ${{ inputs.data }}
 
           # Actually, this is the time of the last push across ALL branches.
           # It doesn't matter for our usecase, since it (should) always be >= than the actual branch push time.
@@ -34,24 +32,38 @@ jobs:
           # So, if you forgot to open a PR and missed a deadline -- you've brought this upon yourself.
           PUSHED_AT: ${{ github.event.pull_request.head.repo.pushed_at }}
           COMMIT: ${{ github.event.pull_request.head.sha }}
-
-          TEST_RESULTS: ${{ inputs.tests }}
-          CODESTYLE: ${{ inputs.codestyle }}
-          COVERAGE: ${{ inputs.coverage }}
         shell: 'python3 {0}'
         run: |
+          import json
           from collections import defaultdict
+          from dataclasses import dataclass
+          from typing import TypedDict, Any
           from zoneinfo import ZoneInfo
 
           from gha_helper import gh, md
 
 
-          config_tests = gh.input.get_json("CONFIG_TESTS")
-          config_codestyle = gh.input.get_json("CONFIG_CODESTYLE")
-          config_coverage = gh.input.get_json("CONFIG_COVERAGE")
+          @dataclass
+          class ModuleData:
+            config: dict[str, Any]
+            results: dict[str, Any]
 
-          platform_names = { p["id"]: p["name_html"] for p in config_tests }
+          def json_loads_or(s: str, default: dict = None) -> dict:
+            if default is None:
+              default = {}
+            try:
+              return json.loads(s) if s else default
+            except json.JSONDecodeError:
+              return default
 
+          needs_context = json.loads(gh.input.get("DATA"))
+
+          modules: dict[str, ModuleData] = {}
+          for name, data in needs_context.items():
+            modules[name] = ModuleData(
+              config=json_loads_or(data.get("outputs", {}).get("config")),
+              results=json_loads_or(data.get("outputs", {}).get("results")),
+            )
 
           def grade(value, levels, results):
             *results, default = results
@@ -69,33 +81,66 @@ jobs:
 
           ########################## GENERATE SUMMARY ##########################
 
-          def render_overview(tests, codestyle, coverage):
-            all_passed = all(platform["all_passed"] for platform in tests.values())
-            if all_passed:
-              md.raw("- All tests completed successfully ✅🎉")
-            else:
-              md.raw("- Some of the tests had failed ❌")
-            
-            n_warnings = codestyle.get("total_warnings", -1)
-            codestyle_text = grade(n_warnings, config_codestyle, [
-              "- Code style is not followed ❌",
-              "- Code style is followed ⚠️",
-              "- Code style is followed ✅",
-              "- Code style is followed ⭐️",
-              "- Code style is ??? 💀",
-            ])
-            plural = 's' if n_warnings != 1 else ''
-            md.raw(f"{codestyle_text} ({n_warnings} warning{plural})")
-            
-            if coverage is not None:
-              percent = coverage.get("percent", -1)
-              emoji = grade(percent, config_coverage, ["❌", "⚠️", "✅", "⭐️", "💀"])
-              md.raw(f"- Code coverage: {percent}% {emoji}")
-              md.raw()
+          def render_overview(modules):
+            if (tests := modules.get("tests")) is not None:
+              if not tests.results:
+                md.raw("- Tests: Critically failed 💀")
+              else:
+                build_only = all(t["build_only"] for t in tests.results)
+                if build_only:
+                  all_built = all(t["built"] for t in tests.results)
+                  if all_built:
+                    md.raw("- All platforms built successfully ✅🎉")
+                  else:
+                    md.raw("- Some of the platforms failed to build ❌")
+                else:
+                  all_passed = all(t["all_passed"] for t in tests.results)
+                  if all_passed:
+                    md.raw("- All tests completed successfully ✅🎉")
+                  else:
+                    md.raw("- Some of the tests had failed ❌")
 
-          def render_test_matrix(tests, platform_names):
+            if (codestyle := modules.get("codestyle")) is not None:
+              if not codestyle.results:
+                md.raw("- Code style: Critically failed 💀")
+              else:
+                n_warnings = codestyle.results.get("total_warnings", -1)
+                codestyle_text = grade(n_warnings, codestyle.config, [
+                  "- Code style is not followed ❌",
+                  "- Code style is followed ⚠️",
+                  "- Code style is followed ✅",
+                  "- Code style is followed ⭐️",
+                  "- Code style is ??? 💀",
+                ])
+                plural = 's' if n_warnings != 1 else ''
+                md.raw(f"{codestyle_text} ({n_warnings} warning{plural})")
+
+            if (coverage := modules.get("coverage")) is not None:
+              if not coverage.results:
+                md.raw("- Code coverage: Critically failed 💀")
+              else:
+                if coverage.results.get("ran"):
+                  percent = coverage.results.get("percent", -1)
+                  emoji = grade(percent, coverage.config, ["❌", "⚠️", "✅", "⭐️", "💀"])
+                  md.raw(f"- Code coverage: {percent}% {emoji}")
+                else:
+                  md.raw("- Code coverage: Failed to run 💀")
+
+            md.raw()
+
+
+          def render_test_matrix(modules):
+            if (tests := modules.get("tests")) is None:
+              return
+
+            if not tests.results:
+              return
+
+            platform_names = {p["id"]: p["name_html"] for p in tests.config}
+            tests_data = {t["id"]: t for t in tests.results}
+
             d = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
-            for platform in tests.values():
+            for platform in tests_data.values():
               for test, status in platform.get("tests", {}).items():
                 if '.' in test:
                   suite, name = test.split(".", 1)
@@ -106,15 +151,15 @@ jobs:
 
             md.raw("### Test matrix")
 
-            table = [[ "", "№ Passed", *platform_names.values() ]]
+            table = [["", "№ Passed", *platform_names.values()]]
 
-            table.append([f"*Built?*", ""])
+            table.append(["*Built?*", ""])
             for pid in platform_names.keys():
-              if tests[pid]["built"]:
+              if tests_data[pid]["built"]:
                 table[-1].append("✅")
               else:
                 table[-1].append("❌")
-            
+
             for suite, platforms in d.items():
               suite = suite.removesuffix("Suite")
               table.append([f"**{suite}**"])
@@ -128,7 +173,7 @@ jobs:
               table[-1].append(f"`{n_passed}/{n_total}`")
 
               for pid in platform_names.keys():
-                if not tests[pid]["ran"]:
+                if not tests_data[pid]["ran"]:
                   table[-1].append("💀")
                 else:
                   if len(platforms[pid]["failed"]) > 0:
@@ -147,28 +192,15 @@ jobs:
             commit = gh.input.get("COMMIT")[:7]
             md.raw(f"*This report was generated for the commit* `{commit}` *pushed on* `{pushed_at}`.")
 
-            
-          def main():
-            md.raw("# 📊 Report Card")
-            md.raw()
-            md.raw("### Overview")
-            md.raw()
 
-            tests = { t["id"]: t for t in gh.input.get_json("TEST_RESULTS") }
-            codestyle = gh.input.get_json("CODESTYLE", {})
+          md.raw("# 📊 Report Card")
+          md.raw()
+          md.raw("### Overview")
+          md.raw()
 
-            if gh.input.get("COVERAGE") == "skipped":
-              coverage = None
-            else:
-              coverage = gh.input.get_json("COVERAGE")
-
-            render_overview(tests, codestyle, coverage)
-
-            render_test_matrix(tests, platform_names)
-
-            render_time_footer()
-
-          main()
+          render_overview(modules)
+          render_test_matrix(modules)
+          render_time_footer()
 
       - name: Post summary
         run: cat SUMMARY.md >> "$GITHUB_STEP_SUMMARY"

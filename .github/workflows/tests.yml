@@ -112,6 +112,7 @@ jobs:
         env:
           JOB_INDEX: ${{ strategy.job-index }}
           BUILT: ${{ steps.build.outcome == 'success' }}
+          BUILD_ONLY: ${{ inputs.build-only }}
           ALL_PASSED: ${{ steps.test.outcome == 'success' }}
         shell: 'python3 {0}'
         run: |
@@ -121,7 +122,6 @@ jobs:
           from gha_helper import gh
 
 
-          LOG_PATH = "/tmp/cicd/tests.log"
           XML_PATH = "/tmp/cicd/tests.xml"
 
 
@@ -143,26 +143,25 @@ jobs:
           def main():
             platform_id = gh.input.get("ID")
             built = gh.input.get("BUILT") == "true"
+            build_only = gh.input.get("BUILD_ONLY") == "true"
+            all_passed = gh.input.get("ALL_PASSED") == "true"
 
-            if os.path.exists(XML_PATH):
+            ran = os.path.exists(XML_PATH)
+
+            if ran:
               tests = parse_junit(XML_PATH)
-              data = {
-                "id": platform_id,
-                "built": built,
-                "ran": True,
-                "all_passed": gh.input.get("ALL_PASSED") == "true",
-                "tests": tests,
-              }
             else:
-              data = {
-                "id": platform_id,
-                "built": built,
-                "ran": False,
-                "all_passed": False
-              }
+              tests = []
 
             job_index = gh.input.get("JOB_INDEX")
-            gh.output.save_json(f"job{job_index}", data)
+            gh.output.save_json(f"job{job_index}", {
+              "id": platform_id,
+              "built": built,
+              "build_only": build_only,
+              "ran": ran,
+              "all_passed": all_passed,
+              "tests": tests,
+            })
 
 
           main()
