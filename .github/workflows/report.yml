@@ -82,6 +82,9 @@ jobs:
           ########################## GENERATE SUMMARY ##########################
 
           def render_overview(modules):
+            if len(modules) == 0:
+              md.raw("- Automated checks are disabled for this labwork.")
+
             if (tests := modules.get("tests")) is not None:
               if not tests.results:
                 md.raw("- Tests: Critically failed 💀")
