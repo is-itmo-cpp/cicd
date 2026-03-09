@@ -139,29 +139,6 @@ jobs:
             md.table(table)
 
 
-          def render_logs(tests, coverage, platform_names):
-            with md.spoiler("<h3>Logs</h3>"):
-              if coverage is not None:
-                with md.spoiler("Code coverage"):
-                  if coverage["ran"]:
-                    md.code(coverage["log"])
-                  else:
-                    md.raw("Did not run.")
-                    md.raw("Check job logs for more info.")
-
-              for pid, name in platform_names.items():
-                with md.spoiler(f"Testing logs / {name}"):
-                  if tests[pid]["ran"]:
-                    md.code(tests[pid].get("logs"))
-                  else:
-                    if not tests[pid]["built"]:
-                      md.raw("Did not run. Build has failed.")
-                    else:
-                      md.raw("Did not run.")
-
-                    md.raw("Check job logs for more info.")
-
-
           def render_time_footer():
             pushed_at = gh.input.get_timestamp("PUSHED_AT") \
               .astimezone(ZoneInfo("Europe/Moscow")) \
@@ -188,10 +165,6 @@ jobs:
             render_overview(tests, codestyle, coverage)
 
             render_test_matrix(tests, platform_names)
-
-            # Temporarily disabled (🎃 LO'GS TAKING TOO LONG)
-            # Ughh, sorry, I meant logs are too big.
-            # render_logs(tests, coverage, config["tests"]["platforms"])
 
             render_time_footer()
 
