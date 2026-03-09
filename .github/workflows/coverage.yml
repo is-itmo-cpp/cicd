@@ -33,6 +33,7 @@ jobs:
 
     outputs:
       coverage: ${{ steps.output.outputs.coverage }}
+      verdict: ${{ steps.output.outputs.verdict }}
 
     steps:
       - uses: actions/checkout@v4
@@ -66,10 +67,14 @@ jobs:
       - name: Save output
         id: output
         if: ${{ always() }}
+        env:
+          LEVELS: ${{ inputs.levels }}
         shell: 'python3 {0}'
         run: |
           import json
           from gha_helper import gh
+
+          levels = gh.input.get_json("LEVELS")
 
           try:
             with open("/tmp/cicd/build/coverage.json") as f:
@@ -78,12 +83,26 @@ jobs:
             with open("/tmp/cicd/build/coverage.txt") as f:
               coverage_log = f.read()
 
+            percent = coverage["line_percent"]
+            verdict = "pass" if percent >= levels[1] else "fail"
+
+            print(f"\nCoverage: {percent}%")
+            print(f"Verdict: {verdict}")
+
+            gh.output.save("verdict", verdict)
             gh.output.save_json("coverage", {
               "ran": True,
-              "percent": coverage["line_percent"],
+              "percent": percent,
               "log": coverage_log,
             })
           except FileNotFoundError:
+            print("\nVerdict: fail (coverage did not run)")
+            gh.output.save("verdict", "fail")
+
             gh.output.save_json("coverage", {
               "ran": False
             })
+
+      - name: Fail the workflow
+        if: ${{ steps.output.outputs.verdict != 'pass' }}
+        run: exit 1

@@ -41,7 +41,6 @@ jobs:
         shell: 'python3 {0}'
         run: |
           from collections import defaultdict
-          from datetime import datetime, timezone
           from zoneinfo import ZoneInfo
 
           from gha_helper import gh, md
@@ -171,21 +170,6 @@ jobs:
             commit = gh.input.get("COMMIT")[:7]
             md.raw(f"*This report was generated for the commit* `{commit}` *pushed on* `{pushed_at}`.")
 
-
-          def get_verdict(tests, coverage, codestyle):
-            all_passed = all(platform["all_passed"] for platform in tests.values())
-
-            if coverage is not None:
-              coverage_ok = coverage.get("percent", -1) >= config_coverage[1]
-            else:
-              coverage_ok = True
-            
-            style_ok = codestyle.get("total_warnings", float("inf")) < config_codestyle[0]
-
-            success = all_passed and coverage_ok and style_ok
-
-            return "pass" if success else "fail"
-
             
           def main():
             md.raw("# 📊 Report Card")
@@ -211,8 +195,6 @@ jobs:
 
             render_time_footer()
 
-            gh.output.save("verdict", get_verdict(tests, coverage, codestyle))
-
           main()
 
       - name: Post summary
@@ -223,7 +205,3 @@ jobs:
         with:
           refresh-message-position: true
           message-path: SUMMARY.md
-
-      - name: Fail the workflow
-        if: ${{ steps.summary.outputs.verdict != 'pass' }}
-        run: exit 1
