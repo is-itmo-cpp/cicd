@@ -1,0 +1,89 @@
+name: "Coverage"
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        type: string
+        required: true
+
+      levels:
+        description: |
+          Coverage grading levels.
+        type: string
+        required: true
+
+      timeout:
+        description: |
+          Timeout in minutes before the workflow is failed.
+        type: number
+        default: 3
+
+    outputs:
+      coverage:
+        value: ${{ jobs.coverage.outputs.coverage }}
+      config:
+        value: ${{ inputs.levels }}
+
+jobs:
+  coverage:
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: ${{ inputs.timeout }}
+    name: Coverage
+
+    outputs:
+      coverage: ${{ steps.output.outputs.coverage }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Generate build system
+        run: |
+          cmake \
+            -B /tmp/cicd/build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DWITH_COVERAGE=ON \
+            -DNO_COVERAGE_HTML=ON
+
+      - name: Build tests
+        run: |
+          cmake \
+            --build /tmp/cicd/build \
+            --parallel $(nproc)
+
+      - name: Check coverage
+        run: |
+          cmake \
+            --build /tmp/cicd/build \
+            --target coverage
+
+      - name: Show coverage log
+        run: |
+          cat /tmp/cicd/build/coverage.txt
+
+      - name: Save output
+        id: output
+        if: ${{ always() }}
+        shell: 'python3 {0}'
+        run: |
+          import json
+          from gha_helper import gh
+
+          try:
+            with open("/tmp/cicd/build/coverage.json") as f:
+              coverage = json.load(f)
+
+            with open("/tmp/cicd/build/coverage.txt") as f:
+              coverage_log = f.read()
+
+            gh.output.save_json("coverage", {
+              "ran": True,
+              "percent": coverage["line_percent"],
+              "log": coverage_log,
+            })
+          except FileNotFoundError:
+            gh.output.save_json("coverage", {
+              "ran": False
+            })

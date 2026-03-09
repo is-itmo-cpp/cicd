@@ -9,8 +9,9 @@ on:
       codestyle: { type: string, required: true, }
       coverage:  { type: string, required: true, }
 
-      config_tests:   { type: string, required: true, }
-      config_quality: { type: string, required: true, }
+      config_tests:     { type: string, required: true, }
+      config_codestyle: { type: string, required: true, }
+      config_coverage:  { type: string, required: true, }
 
 jobs:
   summary:
@@ -24,7 +25,8 @@ jobs:
         id: summary
         env:
           CONFIG_TESTS: ${{ inputs.config_tests }}
-          CONFIG_QUALITY: ${{ inputs.config_quality }}
+          CONFIG_CODESTYLE: ${{ inputs.config_codestyle }}
+          CONFIG_COVERAGE: ${{ inputs.config_coverage }}
 
           # Actually, this is the time of the last push across ALL branches.
           # It doesn't matter for our usecase, since it (should) always be >= than the actual branch push time.
@@ -46,7 +48,8 @@ jobs:
 
 
           config_tests = gh.input.get_json("CONFIG_TESTS")
-          config_quality = gh.input.get_json("CONFIG_QUALITY")
+          config_codestyle = gh.input.get_json("CONFIG_CODESTYLE")
+          config_coverage = gh.input.get_json("CONFIG_COVERAGE")
 
           platform_names = { p["id"]: p["name_html"] for p in config_tests }
 
@@ -75,7 +78,7 @@ jobs:
               md.raw("- Some of the tests had failed ❌")
             
             n_warnings = codestyle.get("total_warnings", -1)
-            codestyle_text = grade(n_warnings, config_quality["codestyle"], [
+            codestyle_text = grade(n_warnings, config_codestyle, [
               "- Code style is not followed ❌",
               "- Code style is followed ⚠️",
               "- Code style is followed ✅",
@@ -87,7 +90,7 @@ jobs:
             
             if coverage is not None:
               percent = coverage.get("percent", -1)
-              emoji = grade(percent, config_quality["coverage"], ["❌", "⚠️", "✅", "⭐️", "💀"])
+              emoji = grade(percent, config_coverage, ["❌", "⚠️", "✅", "⭐️", "💀"])
               md.raw(f"- Code coverage: {percent}% {emoji}")
               md.raw()
 
@@ -173,11 +176,11 @@ jobs:
             all_passed = all(platform["all_passed"] for platform in tests.values())
 
             if coverage is not None:
-              coverage_ok = coverage.get("percent", -1) >= config_quality["coverage"][1]
+              coverage_ok = coverage.get("percent", -1) >= config_coverage[1]
             else:
               coverage_ok = True
             
-            style_ok = codestyle.get("total_warnings", float("inf")) < config_quality["codestyle"][0]
+            style_ok = codestyle.get("total_warnings", float("inf")) < config_codestyle[0]
 
             success = all_passed and coverage_ok and style_ok
 
