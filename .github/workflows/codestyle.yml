@@ -65,7 +65,7 @@ jobs:
             -exclude-header-filter='^\/tmp\/cicd\/build\/' \
             -source-filter='^(?!\/tmp\/cicd\/build\/).*$' \
             -export-fixes /tmp/cicd/tidy-fixes.yml || true
-         
+
           echo '# tidy-fixes.yml'
           cat /tmp/cicd/tidy-fixes.yml
 
@@ -77,7 +77,6 @@ jobs:
         run: |
           import bisect
           import os.path
-          import re
           import yaml
           from dataclasses import dataclass, field
           from pathlib import Path
@@ -110,23 +109,6 @@ jobs:
               line, column = line_idx + 1, offset - line_start + 1
 
               return line, column
-
-
-          # https://github.com/actions/toolkit/blob/f58042f9cc16bcaa87afaa86c2974a8c771ce1ea/packages/core/src/command.ts#L103
-          def escape_data(s) -> str:
-            return (str(s)
-              .replace("%", "%25")
-              .replace("\r", "%0D")
-              .replace("\n", "%0A"))
-
-
-          def escape_property(s) -> str:
-            return (str(s)
-              .replace("%", "%25")
-              .replace("\r", "%0D")
-              .replace("\n", "%0A")
-              .replace(":", "%3A")
-              .replace(",", "%2C"))
 
 
           def process_diagnostics(diagnostics: Path, root: Path):
@@ -167,19 +149,11 @@ jobs:
               except ValueError:
                 continue
 
-              props = ",".join([
-                f"file={escape_property(file)}",
-                f"line={line}",
-                f"col={col}",
-              ])
-
               if level == "Error":
-                level = "error"
+                gh.annotation.error(message, file=file, line=line, col=col)
               else:
-                level = "warning"
+                gh.annotation.warning(message, file=file, line=line, col=col)
 
-              print(f"In file {file}:{line}:{col}:")
-              print(f"::{level} {props}::{escape_data(message)}")
               total_warnings += 1
 
             required_warns = gh.input.get_json("LEVELS")[0]
@@ -187,8 +161,7 @@ jobs:
 
             print("\nVerdict:", verdict)
 
-            print(f"::set-output name=verdict::{verdict}")
-
+            gh.output.save("verdict", verdict)
             gh.output.save_json("codestyle", {
               "total_warnings": total_warnings,
             })
