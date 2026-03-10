@@ -151,7 +151,7 @@ jobs:
             if ran:
               tests = parse_junit(XML_PATH)
             else:
-              tests = []
+              tests = {}
 
             job_index = gh.input.get("JOB_INDEX")
             gh.output.save_json(f"job{job_index}", {
