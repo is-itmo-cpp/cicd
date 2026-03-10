@@ -14,6 +14,12 @@ on:
         required: true
         type: string
 
+      cmake-flags:
+        description: |
+          Additional cmake flags.
+        type: string
+        default: ""
+
       build-only:
         description: |
           Check that everything builds, but do not run any tests.
@@ -86,7 +92,8 @@ jobs:
           cmake \
             -B /tmp/cicd/build \
             -D CMAKE_CXX_COMPILER="$COMPILER" \
-            -D CMAKE_CXX_FLAGS="$FLAGS"
+            -D CMAKE_CXX_FLAGS="$FLAGS" \
+            ${{ inputs.cmake-flags }}
 
       - name: Build tests
         id: build

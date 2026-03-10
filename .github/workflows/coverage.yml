@@ -19,6 +19,12 @@ on:
         type: number
         default: 3
 
+      cmake-flags:
+        description: |
+          Additional cmake flags.
+        type: string
+        default: ""
+
     outputs:
       results:
         value: ${{ jobs.coverage.outputs.results }}
@@ -46,7 +52,8 @@ jobs:
             -B /tmp/cicd/build \
             -DCMAKE_BUILD_TYPE=Debug \
             -DWITH_COVERAGE=ON \
-            -DNO_COVERAGE_HTML=ON
+            -DNO_COVERAGE_HTML=ON \
+            ${{ inputs.cmake-flags }}
 
       - name: Build tests
         run: |

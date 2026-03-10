@@ -25,6 +25,12 @@ on:
         type: number
         default: 3
 
+      cmake-flags:
+        description: |
+          Additional cmake flags.
+        type: string
+        default: ""
+
     outputs:
       results:
         value: ${{ jobs.codestyle.outputs.results }}
@@ -50,7 +56,8 @@ jobs:
         run: |
           cmake \
             -B /tmp/cicd/build \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            ${{ inputs.cmake-flags }}
 
       - name: Run clang-tidy
         env:
