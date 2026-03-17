@@ -99,7 +99,7 @@ jobs:
                 else:
                   all_passed = all(t["all_passed"] for t in tests.results)
                   if all_passed:
-                    md.raw("- All tests completed successfully ✅🎉")
+                    md.raw("- All tests passed successfully ✅🎉")
                   else:
                     md.raw("- Some of the tests had failed ❌")
 
