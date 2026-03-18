@@ -13,6 +13,12 @@ on:
         type: string
         required: true
 
+      tidy-version:
+        description: |
+          Clang-tidy version to use.
+        type: number
+        required: true
+
       tidy-config:
         description: |
           Clang-tidy configuration.
@@ -65,7 +71,7 @@ jobs:
         run: |
           echo "$TIDY_CONFIG" > /tmp/cicd/tidy-config.yml
 
-          run-clang-tidy-19 \
+          run-clang-tidy-${{ inputs.tidy-version }} \
             -p /tmp/cicd/build \
             -config-file=/tmp/cicd/tidy-config.yml \
             -header-filter=. \
