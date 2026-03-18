@@ -72,6 +72,7 @@ jobs:
           echo "$TIDY_CONFIG" > /tmp/cicd/tidy-config.yml
 
           run-clang-tidy-${{ inputs.tidy-version }} \
+            -j "${JOBS:-1}" \
             -p /tmp/cicd/build \
             -config-file=/tmp/cicd/tidy-config.yml \
             -header-filter=. \

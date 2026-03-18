@@ -59,10 +59,11 @@ jobs:
         run: |
           cmake \
             --build /tmp/cicd/build \
-            --parallel $(nproc)
+            --parallel "${JOBS:-1}"
 
       - name: Check coverage
         run: |
+          export CTEST_PARALLEL_LEVEL="${JOBS:-1}"
           cmake \
             --build /tmp/cicd/build \
             --target coverage

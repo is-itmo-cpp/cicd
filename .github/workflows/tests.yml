@@ -100,7 +100,7 @@ jobs:
         run: |
           cmake \
             --build /tmp/cicd/build \
-            --parallel "$(nproc)"
+            --parallel "${JOBS:-1}"
 
       - name: Run tests
         id: test
@@ -108,6 +108,7 @@ jobs:
         run: |
           ctest \
             --test-dir /tmp/cicd/build \
+            --parallel "${JOBS:-1}" \
             --repeat-until-fail ${{ inputs.repeat }} \
             --output-on-failure \
             --output-log /tmp/cicd/tests.log \
