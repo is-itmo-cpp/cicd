@@ -16,11 +16,19 @@ on:
 jobs:
   summary:
     name: Summary
-    runs-on: ${{ inputs.runs-on }}
+    # TEMPORARY: self-hosted runners are down, run on GitHub-hosted ones.
+    # `inputs.runs-on` is intentionally ignored. Revert once `itmogus` is back.
+    runs-on: ubuntu-26.04
     if: ${{ !cancelled() }}
     permissions:
       pull-requests: write
     steps:
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --user --break-system-packages -q \
+            tabulate \
+            "gha_helper @ git+https://github.com/is-itmo-cpp/runner#subdirectory=gha-helper"
+
       - name: Generate summary
         id: summary
         env:

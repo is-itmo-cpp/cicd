@@ -45,7 +45,11 @@ on:
 
 jobs:
   codestyle:
-    runs-on: ${{ inputs.runs-on }}
+    # TEMPORARY: self-hosted runners are down, run on GitHub-hosted ones.
+    # `inputs.runs-on` is intentionally ignored. Revert once `itmogus` is back.
+    runs-on: ubuntu-26.04
+    env:
+      JOBS: 2
     timeout-minutes: ${{ inputs.timeout }}
     name: Codestyle
 
@@ -54,6 +58,16 @@ jobs:
       verdict: ${{ steps.output.outputs.verdict }}
 
     steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            libgtest-dev libgmock-dev libclang-rt-21-dev \
+            libcurl4-openssl-dev nlohmann-json3-dev
+          python3 -m pip install --user --break-system-packages -q \
+            pyyaml tabulate \
+            "gha_helper @ git+https://github.com/is-itmo-cpp/runner#subdirectory=gha-helper"
+
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
